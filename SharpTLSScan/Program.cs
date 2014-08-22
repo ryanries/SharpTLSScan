@@ -137,7 +137,15 @@ namespace SharpTLSScan
             }
             #endregion
 
-            Console.WriteLine(hostName + " supports the following\nprotocol versions and cipher suites:\n");
+            Console.WriteLine(hostName + ":" + portNum + " supports the following \nprotocol versions and cipher suites:\n");
+
+            List<string> sslv20CipherSuitesSupported = new List<string>();
+            List<string> sslv30CipherSuitesSupported = new List<string>();
+            List<string> tlsv10CipherSuitesSupported = new List<string>();
+            List<string> tlsv11CipherSuitesSupported = new List<string>();
+            List<string> tlsv12CipherSuitesSupported = new List<string>();
+
+            Console.Write("Working...");
                                     
             // With SSLv2, only one request to the server is necessary, because the server
             // gives all supported cipher suites in the first ServerHello. SSLv2 is not secure, so all SSLv2 support is hilighted in RED.
@@ -218,13 +226,11 @@ namespace SharpTLSScan
                             Array.Reverse(cSpec);
 
                             string csName = Enum.GetName(typeof(SSLv2CipherSuite), BitConverter.ToInt32(cSpec, 0));
-                            Console.ForegroundColor = ConsoleColor.Red;
+                            
                             if (csName.Length > 0)
-                                Console.WriteLine("SSLv20 Cipher: " + csName);
+                                sslv20CipherSuitesSupported.Add("SSLv20 Cipher: " + csName);
                             else
-                                Console.WriteLine("SSLv20 Cipher: UNKNOWN");
-
-                            Console.ResetColor();
+                                sslv20CipherSuitesSupported.Add("SSLv20 Cipher: UNKNOWN");                            
                         }
                     }
                     catch
@@ -234,6 +240,23 @@ namespace SharpTLSScan
                 }
             }
             #endregion
+
+            try
+            {
+                Console.SetCursorPosition(0, Console.CursorTop);
+            }
+            catch
+            {
+                // SetCursorPosition will throw exception if the user redirects standard output!
+                Console.WriteLine();
+            }
+
+            Console.ForegroundColor = ConsoleColor.Red;
+            foreach (string line in sslv20CipherSuitesSupported)
+                Console.WriteLine(line);
+
+            Console.ResetColor();
+            Console.Write("Working...");
 
             // Parallel powers, ACTIVATE
             #region SSLv3,TLSv1.0-1.2
@@ -315,21 +338,20 @@ namespace SharpTLSScan
                                 if (serverHello[5] != 0x02) // Server Hello
                                     throw new Exception("Server did not send a ServerHello message.");
 
-                                if (cipherSuite.ToString().Contains("NULL"))
-                                {
-                                    Console.ForegroundColor = ConsoleColor.Red;
-                                    Console.WriteLine(protocolVersion + " Cipher: " + cipherSuite);
-                                    Console.ResetColor();
-                                }
-                                else if (cipherSuite.ToString().Contains("MD5"))
-                                {
-                                    Console.ForegroundColor = ConsoleColor.Yellow;
-                                    Console.WriteLine(protocolVersion + " Cipher: " + cipherSuite);
-                                    Console.ResetColor();
-                                }
+                                if (protocolVersion == ProtocolVersion.SSLv30)
+                                    sslv30CipherSuitesSupported.Add(protocolVersion + " Cipher: " + cipherSuite);
+                                else if (protocolVersion == ProtocolVersion.TLSv10)
+                                    tlsv10CipherSuitesSupported.Add(protocolVersion + " Cipher: " + cipherSuite);
+                                else if (protocolVersion == ProtocolVersion.TLSv11)
+                                    tlsv11CipherSuitesSupported.Add(protocolVersion + " Cipher: " + cipherSuite);
+                                else if (protocolVersion == ProtocolVersion.TLSv12)
+                                    tlsv12CipherSuitesSupported.Add(protocolVersion + " Cipher: " + cipherSuite);
                                 else
                                 {
-                                    Console.WriteLine(protocolVersion + " Cipher: " + cipherSuite);
+                                    Console.ForegroundColor = ConsoleColor.Red;
+                                    Console.WriteLine("ERROR: Protocol version was unexpected.");
+                                    Console.ResetColor();
+                                    Environment.Exit(1);
                                 }
                             }
                         }
@@ -339,8 +361,69 @@ namespace SharpTLSScan
 
                     }
                 }
+                Console.Write(".");
             });
             #endregion
+
+            try
+            {
+                Console.SetCursorPosition(0, Console.CursorTop);                
+            }
+            catch
+            {
+                // SetCursorPosition will throw exception if user redirects standard output!
+                Console.WriteLine();
+            }
+            
+            foreach (string line in sslv30CipherSuitesSupported)
+            {
+                if (line.ToLower().Contains("md5") | line.ToLower().Contains("rc4"))
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(line);
+                    Console.ResetColor();
+                }
+                else
+                    Console.WriteLine(line);
+            }
+
+            foreach (string line in tlsv10CipherSuitesSupported)
+            {
+                if (line.ToLower().Contains("md5") | line.ToLower().Contains("rc4"))
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(line);
+                    Console.ResetColor();
+                }
+                else
+                    Console.WriteLine(line);
+            }
+
+            foreach (string line in tlsv11CipherSuitesSupported)
+            {
+                if (line.ToLower().Contains("md5") | line.ToLower().Contains("rc4"))
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(line);
+                    Console.ResetColor();
+                }
+                else
+                    Console.WriteLine(line);
+            }
+
+            foreach (string line in tlsv12CipherSuitesSupported)
+            {
+                if (line.ToLower().Contains("md5") | line.ToLower().Contains("rc4"))
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(line);
+                    Console.ResetColor();
+                }
+                else
+                    Console.WriteLine(line);
+            }
+            
+            Console.ResetColor();
         }
 
         static void PrintHelpMessage()
@@ -403,10 +486,6 @@ namespace SharpTLSScan
             {
                 Console.WriteLine("Signature Algorithm   : " + cert.SignatureAlgorithm.FriendlyName + " (" + cert.SignatureAlgorithm.Value + ")");
             }
-
-            //AsnEncodedData d = new AsnEncodedData(cert.PublicKey.Oid, );
-            //Console.WriteLine("\n\n" + cert.PublicKey.Key.SignatureAlgorithm.);
-            
             Console.WriteLine("Key Exchange Algorithm: " + cert.PublicKey.Key.KeyExchangeAlgorithm);
             Console.WriteLine("Public Key Algorithm  : " + new System.Security.Cryptography.Oid(cert.GetKeyAlgorithm()).FriendlyName);
             Console.WriteLine("Public Key Size       : " + cert.PublicKey.Key.KeySize);
