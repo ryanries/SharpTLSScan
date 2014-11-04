@@ -18,6 +18,7 @@ using System.Text.RegularExpressions;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.IO;
 
 namespace SharpTLSScan
@@ -26,11 +27,12 @@ namespace SharpTLSScan
     {
         private static string productName = Assembly.GetExecutingAssembly().GetName().Name;
         private static string productVersion = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileVersion.Split('.')[0] +
-            "." + FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileVersion.Split('.')[1];          
+            "." + FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileVersion.Split('.')[1];
 
         static void Main(string[] args)
         {
             byte[] clientRandom = new byte[28];
+            bool bypassSchannel = false;
 
             #region Argument validation, DNS resolution, and TCP connectivity
             UInt16 portNum = 443;
@@ -38,28 +40,17 @@ namespace SharpTLSScan
 
             Regex hostnameRegex = new Regex(@"^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$", RegexOptions.IgnoreCase);
 
-            if (args.Length != 1)
-            {
-                PrintHelpMessage();
-                return;
-            }
+            if (args.Length != 1 & args.Length != 2)            
+                PrintHelpMessageAndExit();             
 
             hostName = args[0].Split(':')[0];
 
-            if (!hostnameRegex.IsMatch(hostName))
-            {
-                PrintHelpMessage();
-                return;
-            }
+            if (!hostnameRegex.IsMatch(hostName))            
+                PrintHelpMessageAndExit();
 
-            if (args[0].Contains(':'))
-            {
-                if (!UInt16.TryParse(args[0].Split(':')[1], out portNum))
-                {
-                    PrintHelpMessage();
-                    return;
-                }
-            }
+            if (args[0].Contains(':'))            
+                if (!UInt16.TryParse(args[0].Split(':')[1], out portNum))                
+                    PrintHelpMessageAndExit();
 
             if (!BitConverter.IsLittleEndian)
             {
@@ -67,6 +58,12 @@ namespace SharpTLSScan
                 return;
             }
 
+            if (args.Length == 2)
+                if (args[1].Equals("NoSchannel", StringComparison.OrdinalIgnoreCase))
+                    bypassSchannel = true;
+                else
+                    PrintHelpMessageAndExit();
+            
             Console.WriteLine("Scanning " + hostName + " on port " + portNum + "...");
 
             IPHostEntry ipHostEntry;
@@ -88,10 +85,8 @@ namespace SharpTLSScan
 
             try
             {
-                using (TcpClient tcpClient = new TcpClient(hostName, portNum))
-                {
-                    Console.WriteLine(hostName + " responds to TCP on " + portNum + ".\n");
-                }
+                using (TcpClient tcpClient = new TcpClient(hostName, portNum))                
+                    Console.WriteLine(hostName + " responds to TCP on " + portNum + ".\n");                
             }
             catch (Exception ex)
             {
@@ -106,6 +101,7 @@ namespace SharpTLSScan
             // but it will fail if you've turned off support of all the protocols/ciphers that the server supports and therefore
             // the SChannel SSP cannot negotiate a connection.
             #region SChannel Negotiation
+            if (!bypassSchannel)
             try
             {
                 using (TcpClient tcpClient = new TcpClient(hostName, portNum))
@@ -143,9 +139,7 @@ namespace SharpTLSScan
             List<string> sslv30CipherSuitesSupported = new List<string>();
             List<string> tlsv10CipherSuitesSupported = new List<string>();
             List<string> tlsv11CipherSuitesSupported = new List<string>();
-            List<string> tlsv12CipherSuitesSupported = new List<string>();
-
-            Console.Write("Working...");
+            List<string> tlsv12CipherSuitesSupported = new List<string>();            
                                     
             // With SSLv2, only one request to the server is necessary, because the server
             // gives all supported cipher suites in the first ServerHello. SSLv2 is not secure, so all SSLv2 support is hilighted in RED.
@@ -241,22 +235,11 @@ namespace SharpTLSScan
             }
             #endregion
 
-            try
-            {
-                Console.SetCursorPosition(0, Console.CursorTop);
-            }
-            catch
-            {
-                // SetCursorPosition will throw exception if the user redirects standard output!
-                Console.WriteLine();
-            }
-
             Console.ForegroundColor = ConsoleColor.Red;
             foreach (string line in sslv20CipherSuitesSupported)
                 Console.WriteLine(line);
 
-            Console.ResetColor();
-            Console.Write("Working...");
+            Console.ResetColor();            
 
             // Parallel powers, ACTIVATE
             #region SSLv3,TLSv1.0-1.2
@@ -360,32 +343,16 @@ namespace SharpTLSScan
                     {
 
                     }
-                }
-                Console.Write(".");
+                }                
             });
             #endregion
-
-            try
-            {
-                Console.SetCursorPosition(0, Console.CursorTop);                
-            }
-            catch
-            {
-                // SetCursorPosition will throw exception if user redirects standard output!
-                Console.WriteLine();
-            }
             
+            // Changing all SLLv3 to YELLOW because of Poodle
+            Console.ForegroundColor = ConsoleColor.Yellow;
             foreach (string line in sslv30CipherSuitesSupported)
-            {
-                if (line.ToLower().Contains("md5") | line.ToLower().Contains("rc4"))
-                {
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine(line);
-                    Console.ResetColor();
-                }
-                else
-                    Console.WriteLine(line);
-            }
+                Console.WriteLine(line);
+            
+            Console.ResetColor();
 
             foreach (string line in tlsv10CipherSuitesSupported)
             {
@@ -426,10 +393,10 @@ namespace SharpTLSScan
             Console.ResetColor();
         }
 
-        static void PrintHelpMessage()
+        static void PrintHelpMessageAndExit()
         {            
-            Console.WriteLine("\n" + productName + " " + productVersion + " 2014 by Joseph Ryan Ries\n");
-            Console.WriteLine("Usage: C:\\>SharpTLSScan myhost.domain.com[:7000]\n");
+            Console.WriteLine("\n" + productName + " " + productVersion + " 2014 by Joseph Ryan Ries | myotherpcisacloud.com\n");
+            Console.WriteLine("Usage: C:\\>SharpTLSScan myhost.domain.com[:7000] [NoSchannel]\n");
             Console.WriteLine("SSL and TLS diagnostics on myhost.domain.com on port 7000.\n");
             Console.WriteLine("If no port number is given, a default of 443 is used.\n");
             Console.Write("Good things (such as a valid certificate) are highlighted in ");
@@ -443,7 +410,10 @@ namespace SharpTLSScan
             Console.Write("OK but not great things (such as MD5 hashes) are highlighted in ");
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("YELLOW.\n");
-            Console.ResetColor();            
+            Console.ResetColor();
+            Console.WriteLine("The NoSchannel parameter is optional, and if you specify it,");
+            Console.WriteLine("an Schannel-based connection will not be attempted.\n");
+            Environment.Exit(1);
         }
 
         private static bool CertificateValidationCallBack(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
@@ -545,6 +515,8 @@ namespace SharpTLSScan
             return correctedSplitString.ToArray();
         }
     }
+
+
 
     enum ProtocolVersion : ushort
     {
