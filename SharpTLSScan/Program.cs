@@ -37,10 +37,11 @@ namespace SharpTLSScan
             #region Argument validation, DNS resolution, and TCP connectivity
             UInt16 portNum = 443;
             string hostName = string.Empty;
+            IPAddress ipAddress;
 
             Regex hostnameRegex = new Regex(@"^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$", RegexOptions.IgnoreCase);
 
-            if (args.Length != 1 & args.Length != 2)            
+            if ((args.Length != 1) & (args.Length != 2))            
                 PrintHelpMessageAndExit();             
 
             hostName = args[0].Split(':')[0];
@@ -64,24 +65,38 @@ namespace SharpTLSScan
                 else
                     PrintHelpMessageAndExit();
             
-            Console.WriteLine("Scanning " + hostName + " on port " + portNum + "...");
 
-            IPHostEntry ipHostEntry;
+
+            IPHostEntry ipHostEntry = null;
             try
             {
                 ipHostEntry = Dns.GetHostEntry(hostName);
             }
             catch (Exception ex)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("ERROR: " + ex.Message);
-                Console.ResetColor();
-                return;
+                // DNS didn't work, maybe it's an IP address?
+                if (IPAddress.TryParse(hostName, out ipAddress) == false)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("ERROR: " + ex.Message);
+                    Console.ResetColor();
+                    return;
+                }
+                else
+                {
+                    hostName = ipAddress.ToString();
+                }
             }
 
-            Console.WriteLine(hostName + " resolved to " + ipHostEntry.AddressList.Length + " IP addresses:");
-            foreach (var ip in ipHostEntry.AddressList)
-                Console.WriteLine(" " + ip);
+            Console.WriteLine("Scanning " + hostName + " on port " + portNum + "...");
+
+            if (ipHostEntry != null)
+            {
+                Console.WriteLine(hostName + " resolved to " + ipHostEntry.AddressList.Length + " IP addresses:");
+                foreach (var ip in ipHostEntry.AddressList)
+                    Console.WriteLine(" " + ip);
+            }
+
 
             try
             {
